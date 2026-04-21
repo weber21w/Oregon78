@@ -23,7 +23,6 @@ static void OregonAdvancePrngPerElapsedFrame(void){
 	u16 current_vsync_count = GetVsyncCounter();
 
 	if(current_vsync_count < OregonPrngVsyncMark){
-		/* Handles ClearVsyncCounter() and rare counter wrap cleanly. */
 		OregonPrngVsyncMark = current_vsync_count;
 	}
 
@@ -681,7 +680,7 @@ static void InitGame(void){
 	seed = (u16)OREGON_FALLBACK_SEED;
 #endif
 
-	GetPrngNumber(seed);	/* Uzebox PRNG uses any positive value as a seed. */
+	GetPrngNumber(seed);
 	OregonSyncPrngVsyncMark();
 	OregonSyncJoypadState();
 	g.death_reason = DEATH_NONE;
@@ -916,6 +915,7 @@ static void ShootSubroutine(void){
 		u16 newly_pressed;
 		u8 correct_pressed = 0;
 
+		ConEnsureLinesAvailable(3);
 		ConPrintL("PRESS ");
 		ConPrint(expected_word);
 		ConNewLine();
@@ -957,6 +957,7 @@ static void ShootSubroutine(void){
 		return;
 	}
 
+	ConEnsureLinesAvailable(2);
 	ConPrintL("TYPE ");
 	ConPrint(expected_word);
 	ConNewLine();
