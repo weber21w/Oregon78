@@ -8,6 +8,7 @@
 
 static u16 OregonPrngVsyncMark;
 static u8 OregonInputMode;
+static u8 OregonScreenOffset;
 static u16 OregonPrevJoypadState;
 
 static OregonGame g;
@@ -47,6 +48,22 @@ static u8 OregonGetKeyNonBlocking(void){
 static void OregonSyncJoypadState(void){
 	OregonPrevJoypadState = ReadJoypad(0);
 }
+
+static u8 OregonGetTextWidth(void){
+	u8 text_width = (u8)(OREGON_SCREEN_W - OregonScreenOffset);
+
+	if(text_width == 0){
+		return 1;
+	}
+
+	return text_width;
+}
+
+
+static u8 OregonGetScreenX(u8 logical_x){
+	return (u8)(logical_x + OregonScreenOffset);
+}
+
 
 static u8 OregonGetShotFramesPerUnit(void){
 	if(OregonInputMode == OREGON_INPUT_JOYPAD){
@@ -167,15 +184,15 @@ static void ConPut(char c){
 			--cursor_x;
 		}else if(cursor_y){
 			--cursor_y;
-			cursor_x = (u8)(OREGON_SCREEN_W - 1);
+			cursor_x = (u8)(OregonGetTextWidth() - 1);
 		}
-		PrintChar(cursor_x, cursor_y, ' ');
+		PrintChar(OregonGetScreenX(cursor_x), cursor_y, ' ');
 		return;
 	}
 
-	PrintChar(cursor_x, cursor_y, (u8)c);
+	PrintChar(OregonGetScreenX(cursor_x), cursor_y, (u8)c);
 	++cursor_x;
-	if(cursor_x >= OREGON_SCREEN_W){
+	if(cursor_x >= OregonGetTextWidth()){
 		ConAdvanceLine();
 	}
 }
@@ -342,7 +359,7 @@ static void JoypadRenderIntField(u8 x, u8 y, const char *digits, u8 cursor_pos){
 	}
 	field_buf[5] = ']';
 	field_buf[6] = 0;
-	PrintRam(x, y, (unsigned char *)field_buf);
+	PrintRam(OregonGetScreenX(x), y, (unsigned char *)field_buf);
 }
 
 
@@ -436,13 +453,10 @@ static s16 ReadIntJoypad(void){
 		if(newly_pressed & (BTN_A | BTN_START)){
 			s16 value = JoypadDigitsToInt(digits);
 			JoypadFormatInt(value_buf, value);
-			PrintChar(edit_x + 0, edit_y, ' ');
-			PrintChar(edit_x + 1, edit_y, ' ');
-			PrintChar(edit_x + 2, edit_y, ' ');
-			PrintChar(edit_x + 3, edit_y, ' ');
-			PrintChar(edit_x + 4, edit_y, ' ');
-			PrintChar(edit_x + 5, edit_y, ' ');
-			PrintRam(edit_x, edit_y, (unsigned char *)value_buf);
+			for(digit_index = 0; digit_index < 6; ++digit_index){
+				PrintChar(OregonGetScreenX((u8)(edit_x + digit_index)), edit_y, ' ');
+			}
+			PrintRam(OregonGetScreenX(edit_x), edit_y, (unsigned char *)value_buf);
 			cursor_x = (u8)(edit_x + strlen(value_buf));
 			cursor_y = edit_y;
 			ConNewLine();
@@ -462,6 +476,66 @@ static void WaitForContinueJoypad(void){
 		if(newly_pressed & (BTN_A | BTN_START)){
 			return;
 		}
+	}
+}
+
+
+static void SelectScreenOffset(void){
+	u8 selection = OregonScreenOffset;
+	u8 last_drawn_selection = 0xff;
+
+	OregonScreenOffset = 0;
+	ConClear();
+	ConPrintL("OREGON TRAIL");
+	ConNewLine();
+	ConNewLine();
+	ConPrintL("SCREEN OFFSET?");
+	ConNewLine();
+	ConPrintL("0:NO  1:1  2:2  3:3");
+	ConNewLine();
+	ConNewLine();
+	ConPrintL("KEYS: 0-3 OR ENTER   JOYPAD: LEFT/RIGHT + A/START");
+
+	while(1){
+		u8 key = OregonGetKeyNonBlocking();
+		u16 newly_pressed;
+
+		if(selection != last_drawn_selection){
+			ConClearLine(6);
+			cursor_x = 0;
+			cursor_y = 6;
+			ConPrintL("CURRENT: ");
+			ConPrintNum(selection);
+			last_drawn_selection = selection;
+		}
+
+		if(key >= '0' && key <= '3'){
+			selection = (u8)(key - '0');
+		}else if(key == '\r' || key == '\n'){
+			OregonScreenOffset = selection;
+			ConClear();
+			return;
+		}
+
+		OregonAdvancePrngPerElapsedFrame();
+		newly_pressed = OregonReadJoypadPressed();
+		if(newly_pressed & (BTN_LEFT | BTN_UP)){
+			if(selection > 0){
+				--selection;
+			}
+		}
+		if(newly_pressed & (BTN_RIGHT | BTN_DOWN)){
+			if(selection < 3){
+				++selection;
+			}
+		}
+		if(newly_pressed & (BTN_A | BTN_START)){
+			OregonScreenOffset = selection;
+			ConClear();
+			return;
+		}
+
+		WaitVsync(1);
 	}
 }
 
@@ -683,6 +757,9 @@ static void InitGame(void){
 	GetPrngNumber(seed);
 	OregonSyncPrngVsyncMark();
 	OregonSyncJoypadState();
+	if(OregonScreenOffset > 3){
+		OregonScreenOffset = 0;
+	}
 	g.death_reason = DEATH_NONE;
 }
 
@@ -967,11 +1044,9 @@ static void ShootSubroutine(void){
 	ReadLine(typed_word, sizeof(typed_word), 1);
 	elapsed_ticks = GetVsyncCounter();
 
-	{
-		u8 shot_frames_per_unit = OregonGetShotFramesPerUnit();
-		if(shot_frames_per_unit > 1u){
-			elapsed_ticks = (elapsed_ticks + (shot_frames_per_unit - 1u)) / shot_frames_per_unit;
-		}
+	u8 shot_frames_per_unit = OregonGetShotFramesPerUnit();
+	if(shot_frames_per_unit > 1u){
+		elapsed_ticks = (elapsed_ticks + (shot_frames_per_unit - 1u)) / shot_frames_per_unit;
 	}
 
 	g.shot_time = (s16)elapsed_ticks;
@@ -1121,8 +1196,7 @@ static void DoHunt(void){
 		return;
 	}
 
-	if((s16)(13 * g.shot_time) > RandPct())
-	{
+	if((s16)(13 * g.shot_time) > RandPct()){
 		ConPrintL("YOU MISSED---AND YOUR DINNER GOT AWAY.....");
 		ConNewLine();
 		return;
@@ -1544,12 +1618,15 @@ blizzard:
 }
 
 
-static void TurnStart(void)
-{
-	if(g.food < 0) g.food = 0;
-	if(g.bullets < 0) g.bullets = 0;
-	if(g.clothing < 0) g.clothing = 0;
-	if(g.misc_supplies < 0) g.misc_supplies = 0;
+static void TurnStart(void){
+	if(g.food < 0)
+		g.food = 0;
+	if(g.bullets < 0)
+		g.bullets = 0;
+	if(g.clothing < 0)
+		g.clothing = 0;
+	if(g.misc_supplies < 0)
+		g.misc_supplies = 0;
 
 	g.food = FxFloorValue(g.food);
 	g.bullets = FxFloorValue(g.bullets);
@@ -1582,8 +1659,7 @@ static void TurnStart(void)
 }
 
 
-static u8 AskAction(void)
-{
+static u8 AskAction(void){
 	s16 menu_choice;
 
 	while(1){
@@ -1885,6 +1961,7 @@ int main(void){
 		ConClear();
 
 		InitGame();
+		SelectScreenOffset();
 		SelectInputMode();
 		AskInstructions();
 		ConNewLine();
@@ -1910,5 +1987,3 @@ int main(void){
 		WaitForEnter();
 	}
 }
-
-

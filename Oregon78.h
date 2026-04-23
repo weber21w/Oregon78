@@ -168,6 +168,10 @@ static u8 OregonGetKeyNonBlocking(void);
 
 static void OregonSyncJoypadState(void);
 
+static u8 OregonGetTextWidth(void);
+
+static u8 OregonGetScreenX(u8 logical_x);
+
 static u8 OregonGetShotFramesPerUnit(void);
 
 static u16 OregonReadJoypadPressed(void);
@@ -231,6 +235,8 @@ static void JoypadFormatInt(char *dst, s16 value);
 static s16 ReadIntJoypad(void);
 
 static void WaitForContinueJoypad(void);
+
+static void SelectScreenOffset(void);
 
 static void SelectInputMode(void);
 
